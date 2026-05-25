@@ -1,3 +1,13 @@
+module Sat {
+
+    @ Satellite operational mode - owned by SatStateMachine; never imported by Layer 3 or below
+    enum Mode : U8 {
+        Safe    = 0  @< Initial and emergency mode
+        Standby = 1  @< Normal operations
+    }
+
+}
+
 module Comms {
 
     @ Comms subsystem mode - received by CommsApplication from SatStateMachine
@@ -14,7 +24,7 @@ module FeatherCdh {
     # BQ25756E enumerations
     # ------------------------------------------------------------------
 
-    @ BQ25756E charging state — CHARGER_STATUS_1 (0x21) bits [2:0]
+    @ BQ25756E charging state - CHARGER_STATUS_1 (0x21) bits [2:0]
     enum BQ25756EChargingState : U8 {
         NOT_CHARGING    = 0x00  @< No charging in progress
         TRICKLE_CHARGE  = 0x01  @< VFB below VBAT_SHORT threshold
@@ -26,7 +36,7 @@ module FeatherCdh {
         CHARGE_DONE     = 0x07  @< Charge termination done
     }
 
-    @ BQ25756E register addresses — used in SET_IC_REGISTER command and MpptIcManager
+    @ BQ25756E register addresses - used in SET_IC_REGISTER command and MpptIcManager
     enum BQ25756Reg : U8 {
         CHARGE_VOLT_LIM        = 0x00  @< Charge voltage limit (16-bit)
         CHARGE_CURR_LIM        = 0x02  @< Charge current limit; bits [10:2], 50 mA/LSB (16-bit)
