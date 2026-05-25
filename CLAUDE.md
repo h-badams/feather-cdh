@@ -66,9 +66,10 @@ Layer 1 — F' Native Bus Drivers (*Driver)
 
 ### Pre-built Subtopologies to Include
 
-| Subtopology | Purpose |
-|-------------|---------|
-| `CdhCore` | CmdDispatcher, EventManager, Health, Version, AssertFatalAdapter, fatalHandler |
+| Subtopology / Component | Purpose |
+|-------------------------|---------|
+| `CdhCore` | CmdDispatcher, ActiveLogger (replaces EventManager; ground-commandable severity filter), Health, Version, AssertFatalAdapter, fatalHandler |
+| `TlmPacketizer` | Standalone; replaces TlmChan. Packs telemetry channels into configurable downlink packets; individual packets ground-commandable enable/disable for Safe mode bandwidth management. |
 | `ComCcsds` | CCSDS framing/deframing pipeline; connects to HC-12 UART driver |
 | `FileHandling` | PrmDb (parameter persistence); FileUplink/Downlink optional |
 
@@ -266,7 +267,7 @@ The HS2 design uses an EnduroSat S-band radio managed by `EnduroSatManager`. For
 1. **SatStateMachine has Safe and Standby modes only.** Transitions: ground commands (`SAFE_MODE`/`SAFE_EXIT`) or vbatt below `CRITICAL_THRESHOLD`.
 2. **EPSApplication has no mode port.** It runs identically regardless of satellite mode.
 3. **Application components do not know the satellite's mode representation.** They receive their own subsystem mode enum from SatStateMachine. They must not import or reference `Sat::Mode` or `Sat::StandbySubmode`.
-4. **CommsApplication gates the ComQueue.** It is the sole driver of `comQueue.run`. In `Safe` mode the drain is suppressed; in `Normal` mode it fires each 10 Hz tick.
+4. **CommsApplication controls the ComQueue drain rate.** It is the sole driver of `comQueue.run`. In `Safe` mode the drain fires every `SAFE_DRAIN_DIVISOR` ticks (default 1 Hz); in `Normal` mode it fires each 10 Hz tick. Event severity filtering (ActiveLogger) and telemetry packet filtering (TlmPacketizer) are separately configurable via ground command.
 5. **No DeployPanelsManager.** The burn wire is not on the PDS board. `DEPLOY_PANELS` command does not exist.
 6. **Two deployment topologies:** `FeatherCdhFullDeployment` (all hardware including PDS) and `FeatherCdhPartialDeployment` (BMS + radio only, no PDS components). PDS-dependent components (`WatchdogPinger`, `INA3221Manager`, their drivers) are excluded from the partial deployment — not stubbed out, just absent.
 7. **HS2-EPS-flightSW is not the driver design to follow.** It is bloated Arduino code. The BQ25756E interface in this project should be plain I2C read/write calls from `MpptIcManager` — no complex class hierarchy.

@@ -33,7 +33,7 @@ Two modes managed by `SatStateMachine`. The satellite boots into **Safe** mode.
 
 | Mode | Description |
 |------|-------------|
-| **Safe** | Initial and emergency mode. EPS monitoring always active. Comms in `Safe` sub-mode: ComQueue drain gated — no autonomous downlink. |
+| **Safe** | Initial and emergency mode. EPS monitoring always active. Comms in `Safe` sub-mode: ComQueue drains at reduced rate (`SAFE_DRAIN_DIVISOR` parameter, default 1 Hz); event severity and telemetry packet filtering configurable via ground command. |
 | **Standby** | Normal operations. EPS monitoring always active. Comms in `Normal` sub-mode: ComQueue drains actively each rate group tick. |
 
 ### Mode Transitions
@@ -52,7 +52,8 @@ The flight software uses a **five-layer architecture**. Component names reflect 
 
 ```
 Layer 5 — System Infrastructure
-    CdhCore (CmdDispatcher, EventManager, Health, Version, AssertFatalAdapter, fatalHandler)
+    CdhCore (CmdDispatcher, ActiveLogger, Health, Version, AssertFatalAdapter, fatalHandler)
+    TlmPacketizer
 
 Layer 4 — Mission Orchestration
     SatStateMachine
@@ -68,7 +69,7 @@ Layer 1 — F' Native Bus Drivers (*Driver)
     LinuxI2cDriver (×2) | LinuxUartDriver | LinuxGpioDriver (×3)
 ```
 
-**Layer 5** provides satellite-wide services: command routing (`CmdDispatcher`), event logging and FATAL escalation (`EventManager → fatalHandler`), component liveness monitoring (`Health`), and version reporting. All other layers depend on Layer 5 services.
+**Layer 5** provides satellite-wide services: command routing (`CmdDispatcher`), event logging with severity filtering and FATAL escalation (`ActiveLogger → fatalHandler`), telemetry packaging (`TlmPacketizer`), component liveness monitoring (`Health`), and version reporting. All other layers depend on Layer 5 services.
 
 **Layer 4** (`SatStateMachine`) evaluates mode conditions each 1 Hz tick and sends typed mode commands to Layer 3 application components that accept a mode port. It has no hardware knowledge.
 
@@ -82,18 +83,19 @@ Layer 1 — F' Native Bus Drivers (*Driver)
 
 ## 5. Subtopology Decomposition
 
-### 5.1 Layer 5 — CdhCore Subtopology
+### 5.1 Layer 5 — CdhCore Subtopology + Infrastructure
 
-Pre-built subtopology. Provides command routing, event collection/downlink, health monitoring, and FATAL-triggered system reset.
+Pre-built subtopology plus two standalone infrastructure components. Provides command routing, event collection/filtering/downlink, telemetry packaging, health monitoring, and FATAL-triggered system reset.
 
 | Component | Purpose |
 |-----------|---------|
 | `cmdDisp` (Svc.CmdDispatcher) | Routes uplink commands to all registered components |
-| `events` (Svc.EventManager) | Collects and downlinks events; routes FATAL via `fatalHandler` |
+| `events` (Svc.ActiveLogger) | Collects and downlinks events; routes FATAL via `fatalHandler`; ground-commandable severity filter (`SET_EVENT_FILTER`) for bandwidth management in `Safe` mode |
 | `$health` (Svc.Health) | Ping-based liveness monitoring |
 | `fatalHandler` (Svc.FatalHandler) | Resets system on FATAL event; reboots into Safe mode |
 | `fatalAdapter` (Svc.AssertFatalAdapter) | Converts C++ assert failures to FATAL events |
 | `version` (Svc.Version) | Reports software version as telemetry |
+| `tlmPacketizer` (Svc.TlmPacketizer) | Collects component telemetry and packs it into configurable downlink packets; replaces `TlmChan`. Individual packets can be enabled/disabled via ground command (`SEND_PKT`/`CLR_PKT`) for telemetry bandwidth management. Packet definitions TBD. |
 
 ### 5.2 Layer 3 Pre-Built Subtopologies
 
@@ -123,7 +125,7 @@ Pre-built subtopology. Provides command routing, event collection/downlink, heal
 
 | Component | Type | Purpose |
 |-----------|------|---------|
-| `CommsApplication` | Active | Hierarchical SM (Safe / Normal). Receives mode from `SatStateMachine`; gates `ComCcsds` ComQueue drain: fires `comQueueRun` only in Normal mode. |
+| `CommsApplication` | Active | Flat SM (Safe / Normal). Receives mode from `SatStateMachine`; controls ComQueue drain rate: every tick in Normal mode, every `SAFE_DRAIN_DIVISOR` ticks in Safe mode. |
 | `HC12Manager` | Queued (worker) | Implements `Drv::ByteStreamDriverModel` interface toward `ComCcsds`. Connects downward to `LinuxUartDriver`. Sends HC-12 AT initialization commands during CONFIGURE state. |
 
 **Health monitoring:** `CommsApplication` is health-monitored. `HC12Manager` excluded.
@@ -149,7 +151,7 @@ Pre-built subtopology. Provides command routing, event collection/downlink, heal
 | `RateGroup10Hz` | 10 Hz | `WatchdogPinger`, `CommsApplication` |
 | `RateGroup1Hz` | 1 Hz | `SatStateMachine`, `EPSApplication`, `MpptIcManager`, `INA3221Manager`, `HC12Manager`, `LinuxUartDriver` (telemetry run), `$health` |
 
-> Note: `ComCcsds` ComQueue is not connected to a rate group directly. It is driven by `CommsApplication` via the `comQueueRun` port, which fires on every 10 Hz tick in `Normal` mode. Running `CommsApplication` at 10 Hz matches the F Prime reference pattern of connecting ComQueue to the fastest rate group. See §5.4 and the `CommsApplication` SDD.
+> Note: `ComCcsds` ComQueue is not connected to a rate group directly. It is driven by `CommsApplication` via the `comQueueRun` port: every 10 Hz tick in `Normal` mode, every `SAFE_DRAIN_DIVISOR` ticks in `Safe` mode (default 1 Hz). Running `CommsApplication` at 10 Hz matches the F Prime reference pattern of connecting ComQueue to the fastest rate group. See §5.4 and the `CommsApplication` SDD.
 >
 > Note: F Prime's `Svc::Health` ping timeout is specified as a number of `schedIn` calls. At 1 Hz, a timeout count of 3 gives a 3-second wall-clock deadline — a reasonable value for embedded component liveness checks. This matches the F Prime reference pattern of placing Health on the slowest rate group.
 
