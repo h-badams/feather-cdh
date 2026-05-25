@@ -107,27 +107,9 @@ Health-monitored: **yes**.
 
 ### MpptIcManager (Layer 2, Active)
 
-Sole owner of BQ25756E over I2C. Two-state flat F' SM:
+Sole owner of BQ25756E over I2C. Standard five-state flat F' SM (RESET → WAIT_RESET → ENABLE → CONFIGURE → RUN). RESET writes `REG_RST=1` (software register reset) in place of a hardware GPIO reset. ENABLE reads `PART_INFO` to verify device ID. CONFIGURE writes watchdog disable, ADC enable, and charging config registers. RUN reads all measurement and status registers each tick, assembles `BatteryState`, and pushes to `EPSApplication`. `intPin` interrupt in RUN → RESET. `setRegister` calls during non-RUN states dropped with `WARNING_LO`.
 
-```
-UNINITIALIZED
-  └─ (entry) [no hardware or software reset available — re-write configuration registers to restore known state]
-             read PART_INFO (0x3D) to verify device ID
-             configure ADC, watchdog disable, charging parameters
-             → RUNNING
-
-RUNNING
-  └─ (schedIn tick) trigger one-shot ADC
-                    read measurement registers (vbatt, ibatt, vac, iac, vfb)
-                    read config registers (vrechg, vbat_lowv, ichg)
-                    read charging status + fault/flag registers
-                    assemble batteryState struct → batteryStateOut
-                    emit telemetry
-     (setRegister call) write register over I2C; emit config-changed event
-     (intPin interrupt) read fault registers; emit WARNING_HI; → UNINITIALIZED
-```
-
-**Ports:** `schedIn`, `i2c` (Drv.I2c), `intPin` (async input, `Svc.Cycle` from `LinuxGpioDriver.gpioInterrupt`), `batteryStateOut`, `setRegister` (async input from EPSApplication), telemetry, events.
+**Ports:** `schedIn`, `busWrite` (Drv.I2c), `busWriteRead` (Drv.I2cWriteRead), `intPin` (async input, `Svc.Cycle` from `LinuxGpioDriver.gpioInterrupt`), `batteryStateOut`, `setRegister` (async input from EPSApplication), telemetry, events.
 
 Health-monitored: **no** (hardware manager).
 
@@ -212,7 +194,7 @@ Source: `HS2-EPS-flightSW/HS2-EPS-BatteryManager/include/BQ25756_reg.h`. The HS2
 **CHARGER_STATUS_1 (0x21) bits [2:0] charging state enum:**
 0x00=Not Charging, 0x01=Trickle, 0x02=Pre-charge, 0x03=Fast-charge (CC), 0x04=Taper (CV), 0x05=Reserved, 0x06=Top-off Timer, 0x07=Termination Done
 
-**No hardware RESET pin on BQ25756E** — `icReset` GPIO does not exist. Software register reset via `REG_RST` (bit 7 of `POW_PATH_REV_CONT` 0x19): writing 1 resets all registers to power-on defaults, bit self-clears. `MpptIcManager` writes `REG_RST=1` on each `UNINITIALIZED` entry before writing the initialization sequence. `WD_RST` (CHARGER_CONT bit 5) is distinct — it only resets the internal I2C watchdog timer.
+**No hardware RESET pin on BQ25756E** — `icReset` GPIO does not exist. Software register reset via `REG_RST` (bit 7 of `POW_PATH_REV_CONT` 0x19): writing 1 resets all registers to power-on defaults, bit self-clears. `MpptIcManager` writes `REG_RST=1` in the `RESET` state before the init sequence proceeds. `WD_RST` (CHARGER_CONT bit 5) is distinct — it only resets the internal I2C watchdog timer.
 
 **Key registers for MpptIcManager telemetry polling (each tick):**
 - Read: `VBAT_ADC` (0x33), `IBAT_ADC` (0x2F), `VAC_ADC` (0x31), `IAC_ADC` (0x2D), `TS_ADC` (0x37), `VFB_ADC` (0x39)

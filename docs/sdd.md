@@ -109,9 +109,9 @@ Pre-built subtopology. Provides command routing, event collection/downlink, heal
 | Component | Type | Purpose |
 |-----------|------|---------|
 | `EPSApplication` | Active | Command-driven orchestrator. Reads battery state from `MpptIcManager` each tick; exposes `powerStateGet` synchronous get to `SatStateMachine`; forwards `SET_IC_REGISTER` to `MpptIcManager`. |
-| `MpptIcManager` | Active (worker) | Sole owner of BQ25756E over I2C. Two-state SM (UNINITIALIZED → RUNNING). Reads all measurements each tick; handles INT fault interrupt. |
+| `MpptIcManager` | Active (worker) | Sole owner of BQ25756E over I2C. Five-state SM (RESET → WAIT_RESET → ENABLE → CONFIGURE → RUN). Reads all measurements each tick; handles INT fault interrupt. |
 | `WatchdogPinger` | Passive | Pulses TPS3431SDRBR watchdog GPIO pin each 10 Hz rate group tick. **(PDS-dependent — absent in `FeatherCdhPartialDeployment`)** |
-| `INA3221Manager` | Active (worker) | Reads all three PDS output rail voltages and currents (12 V, 5 V, 3.3 V) over I2C; emits telemetry only. Stub — does not feed `EPSApplication`. **(PDS-dependent — absent in `FeatherCdhPartialDeployment`)** |
+| `INA3221Manager` | Queued (worker) | Reads all three PDS output rail voltages and currents (12 V, 5 V, 3.3 V) over I2C; emits telemetry only. Stub — does not feed `EPSApplication`. **(PDS-dependent — absent in `FeatherCdhPartialDeployment`)** |
 
 `SatStateMachine` retrieves the latest power state from `EPSApplication` each 1 Hz tick by invoking the `powerStateGet` synchronous get port. The returned struct drives Safe/Standby mode transition decisions.
 
@@ -221,8 +221,6 @@ RESET → WAIT_RESET → ENABLE → CONFIGURE → RUN
 - Driven by rate group tick (`schedIn`)
 - On error: log `WARNING_HI` (throttled), send `error` signal → back to `RESET` (self-healing)
 - Configuration via F' parameters where applicable
-
-`MpptIcManager` uses a simplified two-state machine (UNINITIALIZED → RUNNING) due to BQ25756E initialization requirements. See the `MpptIcManager` SDD.
 
 ---
 

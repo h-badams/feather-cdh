@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`INA3221Manager` is the Layer 2 Active component responsible for all communication with the INA3221 26V Triple-Channel Current and Voltage Monitor on the PDS board. It reads the three PDS output rail voltages and currents on each rate group tick and emits them as telemetry. It does not feed data to `EPSApplication`.
+`INA3221Manager` is the Layer 2 Queued component responsible for all communication with the INA3221 26V Triple-Channel Current and Voltage Monitor on the PDS board. It reads the three PDS output rail voltages and currents on each rate group tick and emits them as telemetry. It does not feed data to `EPSApplication`.
 
 **This component is PDS-dependent and is a stub.** It is included in `FeatherCdhFullDeployment` only. It is absent from `FeatherCdhPartialDeployment`. The component code compiles and follows the standard hardware manager state machine pattern; it simply has no real hardware to talk to until the PDS board is available.
 
@@ -21,7 +21,7 @@
 
 ### 3.1 Component Type
 
-Active component with a flat F' state machine following the standard hardware manager pattern.
+Queued component with a flat F' state machine following the standard hardware manager pattern. No dedicated thread — `schedIn` is a sync input that runs on the rate group thread.
 
 ### 3.2 I2C Address
 
@@ -75,8 +75,8 @@ Shunt voltage and bus voltage registers are 13-bit two's complement values in bi
 | Port | Direction | Type | Purpose |
 |------|-----------|------|---------|
 | `schedIn` | Input | `Svc.Sched` | 1 Hz rate group tick |
-| `i2cWrite` | Output | `Drv.I2c` | Write INA3221 registers; calls `LinuxI2cDriver.write` |
-| `i2cWriteRead` | Output | `Drv.I2cWriteRead` | Read INA3221 registers (write register pointer then read data in one repeated-start transaction); calls `LinuxI2cDriver.writeRead` |
+| `busWrite` | Output | `Drv.I2c` | Write INA3221 registers; calls `LinuxI2cDriver.write` |
+| `busWriteRead` | Output | `Drv.I2cWriteRead` | Read INA3221 registers (write register pointer then read data in one repeated-start transaction); calls `LinuxI2cDriver.writeRead` |
 | `logOut` | Output | `Fw.Log` | Event logging |
 | `tlmOut` | Output | `Fw.Tlm` | Six telemetry channels (CH1–CH3 voltage and current) |
 
@@ -104,7 +104,6 @@ ENABLE
 CONFIGURE
   └─ (on schedIn) write configuration register (averaging mode, conversion time, channel enable);
                   → RUN
-                  emit "INA3221Manager transitioned to RUN" event
 
 RUN
   └─ (on schedIn) for each channel (CH1, CH2, CH3):
