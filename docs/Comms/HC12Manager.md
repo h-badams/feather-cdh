@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`HC12Manager` is the Layer 2 Active component that manages the HC-12 433 MHz UART radio module. It implements the `Drv::ByteStreamDriverModel` interface toward `ComCcsds`, making it the byte-stream driver that the `ComCcsds` `comStub` component talks to. Downward, it connects to `LinuxUartDriver` for physical UART I/O.
+`HC12Manager` is the Layer 2 Queued component that manages the HC-12 433 MHz UART radio module. It implements the `Drv::ByteStreamDriverModel` interface toward `ComCcsds`, making it the byte-stream driver that the `ComCcsds` `comStub` component talks to. Downward, it connects to `LinuxUartDriver` for physical UART I/O.
 
 During initialization, `HC12Manager` drives the HC-12 SET pin LOW, sends AT configuration commands over the UART to verify/set operating parameters, then releases SET HIGH to return the module to transparent-bridge operation. In the RUN state it passes bytes bidirectionally between `ComCcsds` and the UART driver without modification.
 
@@ -54,7 +54,7 @@ If the module already holds factory defaults from a previous run, no register wr
 
 ### 4.1 Component Type
 
-Active component with a flat F' state machine following the standard hardware manager pattern.
+Queued component with a flat F' state machine following the standard hardware manager pattern.
 
 ### 4.2 ByteStreamDriver Interface
 
@@ -142,7 +142,7 @@ RUN
 
 - The HC-12 SET pin has an **internal 10 kΩ pull-up**. When `HC12Manager` is not actively driving the pin, it floats high, keeping the module in transparent mode. The `setPin` GPIO only needs to assert LOW during the CONFIGURE state.
 - HC-12 AT commands are **persistent across power cycles** — settings survive power-off. On a fresh deploy, if the module already has correct factory defaults (FU3, 9600 bps, CH001, +20 dBm), the CONFIGURE state AT writes are effectively no-ops that just verify the state. No harm in sending them every time.
-- The AT mode entry timing uses `Os::Task::delay()` which blocks only `HC12Manager`'s own thread. The 40 ms and 80 ms delays are within the component's CONFIGURE handler.
+- The AT mode entry and exit timing (40 ms and 80 ms respectively) is satisfied naturally by the 1 Hz tick interval (1000 ms). `doReset` asserts SET LOW and immediately signals success; WAIT_RESET holds for one full tick before CONFIGURE begins, providing well over the required 40 ms settling time. Similarly, `doConfigure` asserts SET HIGH at the end and signals success; the full tick that elapses before the first RUN action provides well over the required 80 ms before transparent mode traffic begins. No explicit delays are needed.
 - `LinuxUartDriver` receive behavior (interrupt-driven vs polled) affects how `drvReceiveIn` delivers bytes — push callback or polling. Exact wiring TBD pending driver implementation.
 - The HC-12 operates half-duplex at the RF level. The UART wires to the Feather M4 are full-duplex — the module's internal MCU handles RF arbitration. No software-level half-duplex management is required in `HC12Manager`.
 - The ground-side HC-12 is connected via USB-TTL adapter to the PC running the F Prime GDS. The GDS communicates using standard F Prime CCSDS framing — no ground-side software changes are required beyond pointing the GDS at the correct serial port.

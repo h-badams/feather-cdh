@@ -124,7 +124,7 @@ Pre-built subtopology. Provides command routing, event collection/downlink, heal
 | Component | Type | Purpose |
 |-----------|------|---------|
 | `CommsApplication` | Active | Hierarchical SM (Safe / Normal). Receives mode from `SatStateMachine`; gates `ComCcsds` ComQueue drain: fires `comQueueRun` only in Normal mode. |
-| `HC12Manager` | Active (worker) | Implements `Drv::ByteStreamDriverModel` interface toward `ComCcsds`. Connects downward to `LinuxUartDriver`. Sends HC-12 AT initialization commands during CONFIGURE state. |
+| `HC12Manager` | Queued (worker) | Implements `Drv::ByteStreamDriverModel` interface toward `ComCcsds`. Connects downward to `LinuxUartDriver`. Sends HC-12 AT initialization commands during CONFIGURE state. |
 
 **Health monitoring:** `CommsApplication` is health-monitored. `HC12Manager` excluded.
 
