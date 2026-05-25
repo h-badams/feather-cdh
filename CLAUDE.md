@@ -96,12 +96,13 @@ Runs continuously, no hierarchical state machine. On each 1 Hz tick:
 2. Checks vbatt against `POWER_THRESHOLD` and `CRITICAL_THRESHOLD` parameters
 3. Emits `WARNING_HI` events as needed
 4. Assembles and caches `powerState` struct
-5. Emits telemetry channels
 
 **Commands:**
-- `SET_IC_REGISTER(reg: BQ25756Reg, value: U32)` — forwards to `MpptIcManager.setRegister` unconditionally
+- `SET_IC_REGISTER(regAddr: BQ25756Reg, value: U32)` — forwards to `MpptIcManager.setRegister` unconditionally
 
-**Ports:** `schedIn` (1 Hz), `batteryStateIn`, `powerStateGet` (guarded input, returns `PowerState` to `SatStateMachine`), `setRegister` (out to `MpptIcManager`), `pingIn/pingOut`, telemetry, events, prmGet.
+**Ports:** `schedIn` (1 Hz), `batteryStateIn`, `powerStateGet` (guarded input, returns `PowerState` to `SatStateMachine`), `setRegister` (out to `MpptIcManager`), `pingIn/pingOut`, events, prmGet/prmSet.
+
+**No telemetry** — all BQ25756E measurements are already emitted by `MpptIcManager`. EPSApplication's unique outputs are threshold-violation events and `powerStateGet`.
 
 Health-monitored: **yes**.
 

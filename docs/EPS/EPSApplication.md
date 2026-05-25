@@ -34,19 +34,18 @@ Active component. No hierarchical state machine — `EPSApplication` is fully dr
 | `schedIn` | Input | `Svc.Sched` | 1 Hz rate group tick |
 | `batteryStateIn` | async input | Custom struct port | BQ25756E measurements and status from `MpptIcManager`. Fields: `vbatt_mV: U32`, `ibatt_raw: U16`, `vac_mV: U32`, `iac_raw: U16`, `vfb_mV: U32`, `ts_raw: U16`, `chargingState: BQ25756EChargingState`, `chargerStatus2: U8`, `chargerStatus3: U8`, `faultStatus: U8`, `faultFlag: U8`, `mppt_enabled: bool`. |
 | `powerStateGet` | guarded input | Custom sync get port returning `PowerState` struct | Invoked by `SatStateMachine` on its own thread; returns cached `PowerState` without recomputation. Thread safety provided by guarded (mutex-protected) handler. |
-| `setRegister` | Output | Custom port (`BQ25756Reg`, `U32`) | Register write forwarded to `MpptIcManager`. `reg` is a named enum value (e.g., `BQ25756Reg::CHG_ENABLE`, `BQ25756Reg::ICHG_LIM`). |
+| `setRegister` | Output | `FeatherCdh.SetRegisterPort` | Register write forwarded to `MpptIcManager`. `regAddr` is a named enum value (e.g., `BQ25756Reg::CHARGE_VOLT_LIM`, `BQ25756Reg::MPPT_CONT`). |
 | `cmdIn` | Input | `Fw.Cmd` | Ground commands via `CmdDispatcher` |
 | `cmdResponseOut` | Output | `Fw.CmdResponse` | Command completion status |
 | `pingIn` / `pingOut` | In/Out | `Svc.Ping` | Health monitoring |
 | `logOut` | Output | `Fw.Log` | Event logging |
-| `tlmOut` | Output | `Fw.Tlm` | Telemetry (vbatt, ibatt, charging status, fault flags) |
-| `prmGet` | Output | `Fw.PrmGet` | Load `POWER_THRESHOLD` and `CRITICAL_THRESHOLD` from `PrmDb` |
+| `prmGet` / `prmSet` | Out/In | `Fw.PrmGet` / `Fw.PrmSet` | Load and receive updates for `POWER_THRESHOLD` and `CRITICAL_THRESHOLD` from `PrmDb` |
 
 ### 3.3 Commands
 
 | Mnemonic | Args | Description |
 |----------|------|-------------|
-| `SET_IC_REGISTER` | `reg: BQ25756Reg`, `value: U32` | Write a BQ25756E register via `MpptIcManager`. `reg` is a named enum (e.g., `BQ25756Reg::CHARGE_VOLT_LIM`, `BQ25756Reg::MPPT_CONT`). No refusal logic — all writes are forwarded unconditionally. |
+| `SET_IC_REGISTER` | `regAddr: BQ25756Reg`, `value: U32` | Write a BQ25756E register via `MpptIcManager`. `regAddr` is a named enum (e.g., `BQ25756Reg::CHARGE_VOLT_LIM`, `BQ25756Reg::MPPT_CONT`). No refusal logic — all writes are forwarded unconditionally. |
 
 ---
 
@@ -64,7 +63,6 @@ schedIn fires
   → check vbatt against CRITICAL_THRESHOLD
       if below → emit WARNING_HI (CRITICAL_BATTERY)
   → assemble and cache PowerState struct
-  → emit telemetry channels (vbatt, ibatt, charging status, fault flags)
 ```
 
 **Synchronous get flow (`powerStateGet`):**
@@ -79,8 +77,8 @@ SatStateMachine invokes powerStateGet (caller's thread, guarded)
 **Command flow (`SET_IC_REGISTER`):**
 
 ```
-cmdIn SET_IC_REGISTER(reg, value)
-  → call setRegister(reg, value) to MpptIcManager
+cmdIn SET_IC_REGISTER(regAddr, value)
+  → call setRegister(regAddr, value) to MpptIcManager
   → emit activity event (register written)
   → send cmdResponse (OK or EXECUTION_ERROR on I2C failure)
 ```
@@ -92,6 +90,6 @@ cmdIn SET_IC_REGISTER(reg, value)
 - `EPSApplication` does not autonomously enable or disable MPPT or charging. All such changes require an explicit `SET_IC_REGISTER` command from the ground.
 - `batteryStateIn` is an async input port — `MpptIcManager` pushes the struct to `EPSApplication`'s queue on each tick. `EPSApplication` processes it during its own rate group handler. The `powerStateGet` handler returns the value last assembled during `schedIn`, not the raw `batteryStateIn` delivery.
 - `powerStateGet` uses a `guarded_input` port (mutex-protected) rather than a plain `sync_input`, since the cached struct is written by `EPSApplication`'s own thread and read from `SatStateMachine`'s thread.
-- `BQ25756Reg` enum definition (register names and addresses) is documented in the project `CLAUDE.md` and will be formalized as an FPP enum during detailed design.
+- `EPSApplication` emits no telemetry channels — all BQ25756E measurements (vbatt, ibatt, vac, iac, charging state) are already emitted by `MpptIcManager`. `EPSApplication`'s unique outputs are the threshold-violation events and the `powerStateGet` sync port.
 - `POWER_THRESHOLD` and `CRITICAL_THRESHOLD` are persisted F' parameters. Specific values TBD pending battery characterization.
 - `INA3221Manager` emits its rail telemetry independently and does not flow through `EPSApplication`. If PDS rail data ever needs to be part of the `PowerState` struct, this will require an additional `batteryStateIn`-style port from `INA3221Manager` to `EPSApplication`.
