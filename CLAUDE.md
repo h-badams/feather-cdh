@@ -388,7 +388,18 @@ Rules are named `GROUP::RULE` and map to `precondition__GROUP__RULE` / `action__
 ### Active vs Passive components
 
 - **Passive** (sync ports): `invoke_to_<port>` executes the handler immediately; assertions follow directly.
-- **Active** (async queued ports): `invoke_to_<port>` enqueues the message; call `component.doDispatch()` to drain one message before asserting.
+- **Active** (async queued ports): `invoke_to_<port>` enqueues the message. Do NOT call `component.doDispatch()` directly — it is **private** on Active components. Use the static helpers provided by the autocoded TesterBase instead:
+  - `EPSApplicationTesterBase::dispatchOne(component)` — drains one message
+  - `EPSApplicationTesterBase::dispatchCurrentMessages(component)` — drains all queued messages
+  The class name prefix matches the component under test (e.g. `EPSApplicationTesterBase::dispatchOne`).
+
+### Protected opcode constants
+
+`OPCODE_<CMD>` constants are **protected** on the component base class and inaccessible from the tester (which does not inherit from the component). Use the raw numeric value from the autocoded `.hpp` instead (e.g. `OPCODE_SET_IC_REGISTER = 0x0` → use `0x0` in `ASSERT_CMD_RESPONSE`).
+
+### Auto-helpers constant naming
+
+The autocoded `initComponents()` expects `TEST_INSTANCE_QUEUE_DEPTH` (for Active components) and `TEST_INSTANCE_ID` as static constants on the Tester class. Use exactly these names — a mismatch causes a compile error.
 
 ### Running tests
 
