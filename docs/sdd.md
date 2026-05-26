@@ -149,7 +149,7 @@ Pre-built subtopology plus two standalone infrastructure components. Provides co
 | Rate Group | Frequency | Scheduled Components |
 |------------|-----------|---------------------|
 | `RateGroup10Hz` | 10 Hz | `WatchdogPinger`, `CommsApplication` |
-| `RateGroup1Hz` | 1 Hz | `SatStateMachine`, `EPSApplication`, `MpptIcManager`, `INA3221Manager`, `HC12Manager`, `LinuxUartDriver` (telemetry run), `$health` |
+| `RateGroup1Hz` | 1 Hz | `SatStateMachine`, `EPSApplication`, `MpptIcManager`, `INA3221Manager`, `HC12Manager`, `$health` |
 
 > Note: `ComCcsds` ComQueue is not connected to a rate group directly. It is driven by `CommsApplication` via the `comQueueRun` port: every 10 Hz tick in `Normal` mode, every `SAFE_DRAIN_DIVISOR` ticks in `Safe` mode (default 1 Hz). Running `CommsApplication` at 10 Hz matches the F Prime reference pattern of connecting ComQueue to the fastest rate group. See §5.4 and the `CommsApplication` SDD.
 >

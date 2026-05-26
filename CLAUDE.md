@@ -4,9 +4,9 @@
 
 `feather-cdh` is a hardware-in-the-loop (HIL) test environment for a CubeSat EPS (Electrical Power System). The goal is to run the **F Prime flight software framework on FreeRTOS** on a microcontroller that interfaces with two custom PC/104-form-factor power system boards (PDS and BMS), and communicates with a ground station via a 433 MHz radio link.
 
-The project is a **targeted subset of the full HS2 3U CubeSat design**: it integrates only the **EPS** and **Comms** subsystems into an F Prime deployment. There is no ADCS, no payload, no science inference — just power management, watchdog pinging, and RF telemetry/commanding.
+The project integrates only the **EPS** and **Comms** subsystems into an F Prime deployment. There is no ADCS, no payload, no science inference — just power management, watchdog pinging, and RF telemetry/commanding.
 
-**The ESP-32 project proposal (`.claude/EE 474 Project Proposal Draft.md`) fully captures the spirit of the project.** The HS2 SDD describes the broader architecture this project draws from, but is not the authoritative spec — adapt the design for the constraints below.
+**The project proposal (`.claude/EE 474 Project Proposal Draft.md`) captures the original project vision.** The authoritative design spec is `docs/sdd.md` and the per-component docs under `docs/`.
 
 ---
 
@@ -14,7 +14,7 @@ The project is a **targeted subset of the full HS2 3U CubeSat design**: it integ
 
 ### Microcontroller
 
-**Primary:** Adafruit Feather M4 Express (ATSAMD51 Cortex-M4, 120 MHz). Reference F Prime + FreeRTOS port exists at `fprime-featherm4-freertos-reference`.
+**Primary:** Adafruit Feather M4 Express (ATSAMD51 Cortex-M4, 120 MHz).
 
 Current development targets desktop Linux (native F Prime build) to unblock software development. FreeRTOS integration is a future step — do not start that migration until the F Prime component development is complete.
 
@@ -33,7 +33,7 @@ Both boards connect to the flight computer via the **PC/104 shared bus** (I2C + 
 
 ### Radio (to purchase)
 
-**HC-12 433 MHz UART radio module (×2)** — half-duplex FSK transceiver, 9600 bps default, 3.3–5V compatible. One module on the flight computer side, one on the PC/GDS side connected via USB-TTL adapter. This replaces the EnduroSat S-band radio used in full HS2.
+**HC-12 433 MHz UART radio module (×2)** — half-duplex FSK transceiver, 9600 bps default, 3.3–5V compatible. One module on the flight computer side, one on the PC/GDS side connected via USB-TTL adapter.
 
 ---
 
@@ -50,7 +50,7 @@ Both boards connect to the flight computer via the **PC/104 shared bus** (I2C + 
 ```
 Layer 3 — Application (*Application)
     EPSApplication       ← power monitoring, command forwarding, powerState cache
-    CommsApplication     ← radio management (simplified: HC-12 over UART instead of EnduroSat S-band)
+    CommsApplication     ← radio management (HC-12 over UART)
 
 Layer 2 — Hardware Managers (*Manager)
     MpptIcManager        ← sole owner of BQ25756E over I2C
@@ -88,7 +88,7 @@ Layer 1 — F' Native Bus Drivers (*Driver)
 
 ---
 
-## EPS Component Designs (from HS2 SDD)
+## EPS Component Designs
 
 ### EPSApplication (Layer 3, Active)
 
@@ -131,7 +131,7 @@ Health-monitored: **no**.
 
 **I2C address: `0x6B`**
 
-Source: `HS2-EPS-flightSW/HS2-EPS-BatteryManager/include/BQ25756_reg.h`. The HS2-EPS-flightSW repo is an older Arduino-based implementation for reference only — do not copy its driver structure. Use it only for register addresses.
+Register addresses are also documented in `datasheets/bq25756e.pdf`.
 
 ### 16-bit Registers (read/write 2 bytes)
 
@@ -185,7 +185,7 @@ Source: `HS2-EPS-flightSW/HS2-EPS-BatteryManager/include/BQ25756_reg.h`. The HS2
 | `0x3D` | `PART_INFO` | Part Information (device ID) |
 | `0x62` | `REV_BATT_DISCHARGE_CURR` | Reverse Mode Battery Discharge Current |
 
-**Confirmed ADC scaling (from HS2-EPS-flightSW reference code):**
+**Confirmed ADC scaling:**
 - `VBAT_ADC` (0x33): 2 mV/LSB (raw × 2 = millivolts)
 - `VAC_ADC` (0x31): 2 mV/LSB
 - `VFB_ADC` (0x39): 2 mV/LSB
@@ -240,25 +240,176 @@ Source: HC-12 V2.4 User Manual (2016-12-02).
 
 Settings are **persistent across power cycles** — factory defaults are acceptable for this project, so CONFIGURE may just verify via `AT+RX` and skip redundant writes.
 
-## Comms Design (adapted from HS2)
+## Comms Design
 
-The HS2 design uses an EnduroSat S-band radio managed by `EnduroSatManager`. For this project, the radio is replaced by the **HC-12 433 MHz UART module**.
+The radio link uses an **HC-12 433 MHz UART module** as a transparent byte pipe.
 
 - The HC-12 is a transparent UART link — bytes sent to the UART appear at the remote end, and vice versa.
-- `CommsApplication` in this project is simplified: it manages the HC-12 UART driver and bridges the F Prime `ComCcsds` communications stack.
-- A `UartRadioManager` (working name) replaces `EnduroSatManager` — it wraps a `LinuxUartDriver`/equivalent FreeRTOS UART driver and implements `Drv::ByteStreamDriverModel`.
+- `HC12Manager` implements `Drv::ByteStreamDriverModel` and wraps `LinuxUartDriver`.
+- `CommsApplication` controls the `ComCcsds` ComQueue drain rate based on satellite mode.
 - The F Prime GDS on the ground side connects via USB-TTL to the second HC-12 module.
 
 ---
 
-## Reference Repositories
+## Repository Structure
 
-| Repo | Path | Purpose |
-|------|------|---------|
-| `hs2-software-design` | `~/hs2-software-design` | Full HS2 SDD and component docs — architectural reference |
-| `HS2-EPS-flightSW` | `~/HS2-EPS-flightSW` | Older Arduino-based BQ25756 driver — **use only for register addresses**, not driver structure |
-| `fprime-featherm4-freertos-reference` | `~/fprime-featherm4-freertos-reference` | Complete F Prime + FreeRTOS port for Feather M4 fallback — primary platform reference |
-| `fprime-workshop-led-blinker` | `~/fprime-workshop-led-blinker` | F Prime workshop example — useful for topology/component boilerplate reference |
+```
+feather-cdh/
+├── CMakeLists.txt
+├── CMakePresets.json
+├── settings.ini
+├── CLAUDE.md
+├── datasheets/
+│   ├── bq25756e.pdf
+│   ├── HC-12_english_datasheets.pdf
+│   └── ina3221.pdf
+├── docs/
+│   ├── sdd.md                          ← top-level system design document
+│   ├── Core/
+│   │   └── SatStateMachine.md
+│   ├── EPS/
+│   │   ├── EPSApplication.md
+│   │   ├── MpptIcManager.md
+│   │   ├── INA3221Manager.md
+│   │   └── WatchdogPinger.md
+│   └── Comms/
+│       ├── CommsApplication.md
+│       └── HC12Manager.md
+└── FeatherCdh/
+    ├── CMakeLists.txt
+    ├── Types/
+    │   ├── CMakeLists.txt
+    │   └── Types.fpp                   ← Sat.Mode, Comms.Mode, BQ25756Reg, BatteryState, PowerState, custom ports
+    └── Components/
+        ├── CMakeLists.txt
+        ├── SatStateMachine/
+        │   └── SatStateMachine.fpp
+        ├── EPSApplication/
+        │   └── EPSApplication.fpp
+        ├── MpptIcManager/
+        │   └── MpptIcManager.fpp
+        ├── INA3221Manager/
+        │   └── INA3221Manager.fpp
+        ├── WatchdogPinger/
+        │   └── WatchdogPinger.fpp
+        ├── CommsApplication/
+        │   └── CommsApplication.fpp
+        └── HC12Manager/
+            └── HC12Manager.fpp
+```
+
+---
+
+## Testing Conventions (STest / F Prime Structured Tests)
+
+All component unit tests use the **F Prime STest framework** (`STest/` in the fprime repo), not plain GTest. STest adds rule-based and scenario-based testing on top of GTest.
+
+### File layout
+
+Each component's tests live in `Components/<Name>/test/ut/` with **five** files:
+
+| File | Purpose |
+|------|---------|
+| `<Name>Tester.hpp` | Defines `<Name>Tester`, which extends `<Name>GTestBase`. Holds the component under test, `TEST_INSTANCE_ID`, `MAX_HISTORY_SIZE`, stub return values, the constructor, and output port handler overrides. Declares `connectPorts()` and `initComponents()` — bodies are auto-generated. |
+| `TestState.hpp` | Declares `<Name>TestState`, which extends `<Name>Tester`. Only adds `precondition__GROUP__RULE` / `action__GROUP__RULE` method declarations. |
+| `TestState.cpp` | Implements all rule method bodies. No constructor, no port wiring — those live in `<Name>Tester`. |
+| `Rules.hpp` | Uses a macro to expand each `(GROUP, RULE)` pair into an `STest::Rule<<Name>TestState>` struct that delegates to the correspondingly named methods on the state. |
+| `TestMain.cpp` | GTest `TEST(...)` cases — typically one direct single-rule invocation and one `RandomScenario` + `BoundedScenario` run. Also provides `main()` with `STest::Random::seed()`. |
+
+The `register_fprime_ut()` call lives in the component's own `CMakeLists.txt` (not a separate file in `test/ut/`) and must include `UT_AUTO_HELPERS`. This flag triggers autocoding of `<Name>TesterHelpers.cpp` in the build directory, which provides the bodies of `connectPorts()` and `initComponents()` for `<Name>Tester`.
+
+### Three-layer class hierarchy
+
+```
+<Name>GTestBase          ← autocoded; provides ASSERT_from_* macros, port history
+    └── <Name>Tester     ← developer-written; owns component, port handlers, init
+        └── <Name>TestState  ← developer-written; STest rule methods only
+```
+
+### `<Name>Tester.hpp` template
+
+```cpp
+#pragma once
+#include "<Name>GTestBase.hpp"
+#include "FeatherCdh/Components/<Name>/<Name>.hpp"
+
+namespace FeatherCdh {
+
+class <Name>Tester : public <Name>GTestBase {
+  public:
+    static constexpr FwEnumStoreType TEST_INSTANCE_ID = 0;
+    static constexpr U32 MAX_HISTORY_SIZE = 16;
+
+    <Name> component;
+    // inject stub return values here, e.g.: Drv::GpioStatus m_gpioStatus = Drv::GpioStatus::OP_OK;
+
+    <Name>Tester()
+        : <Name>GTestBase("<Name>Tester", MAX_HISTORY_SIZE),
+          component("<Name>") {
+        this->initComponents();   // calls this->init() then component.init()
+        this->connectPorts();     // wires all ports
+        this->clearHistory();
+    }
+
+    void connectPorts();    // body provided by UT_AUTO_HELPERS
+    void initComponents();  // body provided by UT_AUTO_HELPERS
+
+  protected:
+    // Override output port handlers to record calls and return stub values.
+    // Signatures must match the autocoded virtual exactly — use const Fw::X& not Fw::X.
+    ReturnType from_<portName>_handler(FwIndexType portNum, const ArgType& arg) override {
+        this->pushFromPortEntry_<portName>(arg);
+        return this->m_stubValue;
+    }
+};
+
+}  // namespace FeatherCdh
+```
+
+### Critical: output port handler signatures
+
+The autocoded `<Name>TesterBase` declares `from_<portName>_handler` with **const reference** parameters (e.g., `const Fw::Logic& state`). Override declarations must match exactly — using pass-by-value instead of const reference will silently fail to override and the compiler will reject `override`. Always check the generated `<Name>TesterBase.hpp` in the build directory for the exact signature.
+
+### `connectPorts()` and `initComponents()` — do not implement manually
+
+`UT_AUTO_HELPERS` auto-generates these two methods in `<Name>TesterHelpers.cpp` in the build directory. The generated `initComponents()` calls `this->init()` (which wires the tester's from-ports with `addCallComp`) before `component.init()`. If `this->init()` is never called, from-port `m_comp` stays null and any output port invocation asserts at runtime inside the port's `invoke()`. Never re-implement these methods in `TestState.cpp`.
+
+### Rule naming convention
+
+Rules are named `GROUP::RULE` and map to `precondition__GROUP__RULE` / `action__GROUP__RULE` on the state. Example groups: `Ping`, `Init`, `Run`, `Fault`. Example rules within a group: `Nominal`, `GpioError`, `I2cError`, `Timeout`.
+
+### Key STest types
+
+- `STest::Rule<State>` — base for a rule; override `precondition(const State&)` and `action(State&)`.
+- `STest::RandomScenario<State>` — draws applicable rules at random each step.
+- `STest::BoundedScenario<State>` — wraps a scenario and stops after N steps.
+- `STest::Random::seed()` — seeds the PRNG (call once in `main`).
+
+### Active vs Passive components
+
+- **Passive** (sync ports): `invoke_to_<port>` executes the handler immediately; assertions follow directly.
+- **Active** (async queued ports): `invoke_to_<port>` enqueues the message; call `component.doDispatch()` to drain one message before asserting.
+
+### Running tests
+
+```bash
+# One-time setup (or after any CMakeLists change):
+fprime-util purge
+fprime-util generate --ut
+
+# Build and run a single component's tests:
+cd FeatherCdh/Components/<Name>
+fprime-util build --ut
+fprime-util check          # note: no --ut flag on check
+
+# Or build/run all UTs from the project root:
+fprime-util build --ut
+fprime-util check
+```
+
+### CMakeLists stub for incomplete components
+
+If a component's `register_fprime_ut()` references test source files that don't exist yet, `generate --ut` will fail for the entire project. Either comment out that `register_fprime_ut()` block until the files are written, or comment out the component's `add_fprime_subdirectory` in the parent `CMakeLists.txt` to exclude it entirely from the UT build.
 
 ---
 
@@ -270,7 +421,7 @@ The HS2 design uses an EnduroSat S-band radio managed by `EnduroSatManager`. For
 4. **CommsApplication controls the ComQueue drain rate.** It is the sole driver of `comQueue.run`. In `Safe` mode the drain fires every `SAFE_DRAIN_DIVISOR` ticks (default 1 Hz); in `Normal` mode it fires each 10 Hz tick. Event severity filtering (ActiveLogger) and telemetry packet filtering (TlmPacketizer) are separately configurable via ground command.
 5. **No DeployPanelsManager.** The burn wire is not on the PDS board. `DEPLOY_PANELS` command does not exist.
 6. **Two deployment topologies:** `FeatherCdhFullDeployment` (all hardware including PDS) and `FeatherCdhPartialDeployment` (BMS + radio only, no PDS components). PDS-dependent components (`WatchdogPinger`, `INA3221Manager`, their drivers) are excluded from the partial deployment — not stubbed out, just absent.
-7. **HS2-EPS-flightSW is not the driver design to follow.** It is bloated Arduino code. The BQ25756E interface in this project should be plain I2C read/write calls from `MpptIcManager` — no complex class hierarchy.
-8. **HC-12 replaces EnduroSat S-band.** `HC12Manager` implements `Drv::ByteStreamDriverModel` and wraps `LinuxUartDriver`. Same `ComCcsds` subtopology applies.
+7. **BQ25756E interface is plain I2C.** `MpptIcManager` uses direct I2C read/write calls — no complex class hierarchy.
+8. **HC-12 is the radio link.** `HC12Manager` implements `Drv::ByteStreamDriverModel` and wraps `LinuxUartDriver`. Same `ComCcsds` subtopology applies.
 9. **`BQ25756Reg` enum** (register names for `SET_IC_REGISTER` command) should be defined to match the register table above, with human-readable names replacing raw hex addresses.
 10. **WatchdogPinger runs at 10 Hz.** TPS3431S minimum WDI pulse width is 50 ns — assert then immediately deassert with no delay needed. PDS window watchdog must be configured for a compatible window around 10 Hz.
