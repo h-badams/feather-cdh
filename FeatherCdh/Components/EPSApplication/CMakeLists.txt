@@ -1,0 +1,20 @@
+register_fprime_library(
+    AUTOCODER_INPUTS
+        "${CMAKE_CURRENT_LIST_DIR}/EPSApplication.fpp"
+    SOURCES
+        "${CMAKE_CURRENT_LIST_DIR}/EPSApplication.cpp"
+    DEPENDS
+        FeatherCdh_Types
+)
+
+register_fprime_ut(
+    SOURCES
+        "${CMAKE_CURRENT_LIST_DIR}/test/ut/TestState.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/test/ut/TestMain.cpp"
+    AUTOCODER_INPUTS
+        "${CMAKE_CURRENT_LIST_DIR}/EPSApplication.fpp"
+    DEPENDS
+        STest
+        FeatherCdh_Types
+    UT_AUTO_HELPERS
+)
