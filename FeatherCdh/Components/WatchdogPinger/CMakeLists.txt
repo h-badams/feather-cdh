@@ -1,0 +1,20 @@
+register_fprime_library(
+    AUTOCODER_INPUTS
+        "${CMAKE_CURRENT_LIST_DIR}/WatchdogPinger.fpp"
+    SOURCES
+        "${CMAKE_CURRENT_LIST_DIR}/WatchdogPinger.cpp"
+    DEPENDS
+        Drv_Ports
+)
+
+register_fprime_ut(
+    SOURCES
+        "${CMAKE_CURRENT_LIST_DIR}/test/ut/TestState.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/test/ut/TestMain.cpp"
+    AUTOCODER_INPUTS
+        "${CMAKE_CURRENT_LIST_DIR}/WatchdogPinger.fpp"
+    DEPENDS
+        STest
+        Drv_Ports
+    UT_AUTO_HELPERS
+)
