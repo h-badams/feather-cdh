@@ -11,7 +11,7 @@ module Sat {
 module Comms {
 
     @ Comms subsystem mode - received by CommsApplication from SatStateMachine
-    enum Mode : U8 {
+    enum CommsMode : U8 {
         Safe   = 0  @< ComQueue drain suppressed; no autonomous downlink
         Normal = 1  @< ComQueue drained each 10 Hz tick; autonomous downlink active
     }
@@ -128,6 +128,6 @@ module FeatherCdh {
     port PowerStateGetPort() -> PowerState
 
     @ Mode command from SatStateMachine to CommsApplication
-    port CommsModePort(mode: Comms.Mode)
+    port CommsModePort(mode: Comms.CommsMode)
 
 }

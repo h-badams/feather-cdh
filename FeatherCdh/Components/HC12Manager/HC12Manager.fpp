@@ -62,13 +62,13 @@ module FeatherCdh {
         # ByteStreamDriver interface — toward ComCcsds (comStub)
         # ----------------------------------------------------------------------
 
-        import ByteStreamDriver
+        import Drv.ByteStreamDriver
 
         # ----------------------------------------------------------------------
         # ByteStreamDriverClient interface — toward LinuxUartDriver
         # ----------------------------------------------------------------------
 
-        import ByteStreamDriverClient
+        import Drv.ByteStreamDriverClient
 
         # ----------------------------------------------------------------------
         # Other ports

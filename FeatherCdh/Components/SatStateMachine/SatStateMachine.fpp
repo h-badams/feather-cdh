@@ -16,10 +16,10 @@ module FeatherCdh {
         @ SAFE_EXIT ground command received; C++ only sends this when SM is in SAFE
         signal safeExitCmd
 
-        @ Send commsModeOut(Comms.Mode.Safe) and emit mode transition event
+        @ Send commsModeOut(Comms.CommsMode.Safe) and emit mode transition event
         action sendSafeMode
 
-        @ Send commsModeOut(Comms.Mode.Normal) and emit mode transition event
+        @ Send commsModeOut(Comms.CommsMode.Normal) and emit mode transition event
         action sendStandbyMode
 
         @ Satellite boots in Safe mode

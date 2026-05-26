@@ -8,14 +8,14 @@ module FeatherCdh {
         @ Rate-group driven signal; from schedIn handler
         signal tick
 
-        @ Mode command from SatStateMachine; carries new Comms.Mode value
-        signal switchMode: Comms.Mode
+        @ Mode command from SatStateMachine; carries new Comms.CommsMode value
+        signal switchMode: Comms.CommsMode
 
-        @ True if the switchMode signal carries Comms.Mode.Normal
-        guard isModeNormal: Comms.Mode
+        @ True if the switchMode signal carries Comms.CommsMode.Normal
+        guard isModeNormal: Comms.CommsMode
 
-        @ True if the switchMode signal carries Comms.Mode.Safe
-        guard isModeSafe: Comms.Mode
+        @ True if the switchMode signal carries Comms.CommsMode.Safe
+        guard isModeSafe: Comms.CommsMode
 
         @ Emit mode-transition event for Safe entry
         action emitSafeMode
@@ -81,7 +81,7 @@ module FeatherCdh {
         # ----------------------------------------------------------------------
 
         event modeTransition(
-            mode: Comms.Mode
+            mode: Comms.CommsMode
         ) severity activity high \
           format "CommsApplication transitioned to {} mode"
 
@@ -90,7 +90,7 @@ module FeatherCdh {
         # ----------------------------------------------------------------------
 
         @ Current comms mode; emitted every schedIn tick
-        telemetry COMMS_MODE: Comms.Mode
+        telemetry COMMS_MODE: Comms.CommsMode
 
         # ----------------------------------------------------------------------
         # State machine instance
