@@ -101,7 +101,7 @@ Pre-built subtopology plus two standalone infrastructure components. Provides co
 
 | Subtopology | Source | Purpose |
 |-------------|--------|---------|
-| `ComCcsds` | `Svc/Subtopologies/ComCcsds` | Full CCSDS Space Packet + TM/TC framing pipeline. ComQueue drain is driven by `CommsApplication`, not a rate group directly. |
+| `ComCcsds.FramingSubtopology` | `Svc/Subtopologies/ComCcsds` | CCSDS Space Packet + TM/TC framing pipeline **without** `ComStub`. `HC12Manager` provides the `Svc.Com` (Com Adapter) interface that the framer and frameAccumulator wire into. ComQueue drain is driven by `CommsApplication`, not a rate group directly. |
 | `FileHandling` | `Svc/Subtopologies/FileHandling` | `PrmDb` (parameter persistence), `FileUplink`, `FileDownlink`, `FileManager` |
 
 ### 5.3 EPS Subtopology
@@ -126,7 +126,7 @@ Pre-built subtopology plus two standalone infrastructure components. Provides co
 | Component | Type | Purpose |
 |-----------|------|---------|
 | `CommsApplication` | Active | Flat SM (Safe / Normal). Receives mode from `SatStateMachine`; controls ComQueue drain rate: every tick in Normal mode, every `SAFE_DRAIN_DIVISOR` ticks in Safe mode. |
-| `HC12Manager` | Queued (worker) | Implements `Drv::ByteStreamDriverModel` interface toward `ComCcsds`. Connects downward to `LinuxUartDriver`. Sends HC-12 AT initialization commands during CONFIGURE state. |
+| `HC12Manager` | Queued (worker) | Implements `Svc.Com` (Com Adapter) upward into the `ComCcsds.FramingSubtopology` (replaces `Svc.ComStub`) and `Drv.ByteStreamDriverClient` downward to `LinuxUartDriver`. Drives the HC-12 SET pin and sends AT initialization commands during CONFIGURE state; transparent byte passthrough in RUN. |
 
 **Health monitoring:** `CommsApplication` is health-monitored. `HC12Manager` excluded.
 
@@ -235,10 +235,15 @@ RESET → WAIT_RESET → ENABLE → CONFIGURE → RUN
 | `EPSApplication.powerStateGet` (sync get) | `SatStateMachine` | Cached `PowerState` struct (pulled by `SatStateMachine` each 1 Hz tick) |
 | `SatStateMachine.commsModeOut` | `CommsApplication.commsModeIn` | Mode command (`Comms.Mode`) |
 | `CommsApplication.comQueueRun` | `ComCcsds.comQueue.run` | ComQueue drain trigger (fired only in `Comms.Mode.Normal`) |
-| `comStub.drvSendOut` | `HC12Manager.$send` | Downlink: framed packet from comStub to HC12Manager for UART transmission |
-| `comStub.drvReceiveReturnOut` | `HC12Manager.recvReturnIn` | Buffer ownership return after uplink data consumed |
-| `HC12Manager.ready` | `comStub.drvConnected` | HC12Manager signals comStub it is ready (on RUN entry) |
-| `HC12Manager.$recv` | `comStub.drvReceiveIn` | Uplink: bytes received from UART forwarded to comStub for deframing |
+| `ComCcsds.framer.dataOut` | `HC12Manager.dataIn` | Downlink: framed packet to be transmitted (Com Adapter input) |
+| `HC12Manager.dataReturnOut` | `ComCcsds.framer.dataReturnIn` | Downlink buffer ownership return after transmission |
+| `HC12Manager.comStatusOut` | `ComCcsds.framer.comStatusIn` | Tx status / ready signal — `SUCCESS` on RUN entry signals framer to start downlink |
+| `ComCcsds.frameAccumulator.dataReturnOut` | `HC12Manager.dataReturnIn` | Uplink buffer ownership return |
+| `HC12Manager.dataOut` | `ComCcsds.frameAccumulator.dataIn` | Uplink: bytes received from UART, forwarded to frameAccumulator for CCSDS deframing |
+| `HC12Manager.drvSendOut` | `LinuxUartDriver.$send` | Downlink: bytes pushed to UART driver |
+| `LinuxUartDriver.$recv` | `HC12Manager.drvReceiveIn` | Uplink: bytes received from UART |
+| `LinuxUartDriver.ready` | `HC12Manager.drvConnected` | Informational ready signal from UART driver |
+| `HC12Manager.drvReceiveReturnOut` | `LinuxUartDriver.recvReturnIn` | Returns receive buffer ownership to UART driver |
 
 ---
 

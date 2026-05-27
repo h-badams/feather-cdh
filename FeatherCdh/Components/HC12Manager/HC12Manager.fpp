@@ -20,7 +20,7 @@ module FeatherCdh {
         @ One-tick settling delay after SET LOW before sending AT commands
         action doWaitReset
 
-        @ Send AT config commands; assert SET HIGH; delay 80 ms; call ready port
+        @ Send AT config commands; assert SET HIGH; delay 80 ms; emit READY on comStatusOut
         action doConfigure
 
         @ Emit telemetry; byte passthrough handled directly by port handlers
@@ -54,15 +54,18 @@ module FeatherCdh {
 
     }
 
-    @ Layer 2 Active component. Manages HC-12 433 MHz UART radio module.
-    @ Implements Drv::ByteStreamDriver toward ComCcsds and Drv::ByteStreamDriverClient toward LinuxUartDriver.
+    @ Layer 2 Queued component. Manages HC-12 433 MHz UART radio module.
+    @ Implements Svc.Com (Com Adapter) upward to the ComCcsds FramingSubtopology
+    @ and Drv.ByteStreamDriverClient downward to LinuxUartDriver. Fills the role
+    @ of Svc.ComStub in the ComCcsds Subtopology; ComStub is not instanced.
     queued component HC12Manager {
 
         # ----------------------------------------------------------------------
-        # ByteStreamDriver interface — toward ComCcsds (comStub)
+        # Com Adapter interface — toward ComCcsds FramingSubtopology
+        # (HC12Manager replaces Svc.ComStub)
         # ----------------------------------------------------------------------
 
-        import Drv.ByteStreamDriver
+        import Svc.Com
 
         # ----------------------------------------------------------------------
         # ByteStreamDriverClient interface — toward LinuxUartDriver

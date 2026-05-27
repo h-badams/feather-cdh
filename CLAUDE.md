@@ -56,7 +56,8 @@ Layer 2 — Hardware Managers (*Manager)
     MpptIcManager        ← sole owner of BQ25756E over I2C
     INA3221Manager       ← sole owner of INA3221 over I2C (PDS-dependent)
     WatchdogPinger       ← pulses TPS3431S watchdog GPIO each rate group tick (PDS-dependent)
-    HC12Manager          ← manages HC-12 radio; implements Drv::ByteStreamDriver toward ComCcsds
+    HC12Manager          ← manages HC-12 radio; implements Svc.Com (Com Adapter, replaces ComStub)
+                           upward and Drv.ByteStreamDriverClient downward toward LinuxUartDriver
 
 Layer 1 — F' Native Bus Drivers (*Driver)
     LinuxI2cDriver (×2)  ← one per I2C device: BQ25756E (0x6B), INA3221 (addr TBD)
@@ -70,7 +71,7 @@ Layer 1 — F' Native Bus Drivers (*Driver)
 |-------------------------|---------|
 | `CdhCore` | CmdDispatcher, ActiveLogger (replaces EventManager; ground-commandable severity filter), Health, Version, AssertFatalAdapter, fatalHandler |
 | `TlmPacketizer` | Standalone; replaces TlmChan. Packs telemetry channels into configurable downlink packets; individual packets ground-commandable enable/disable for Safe mode bandwidth management. |
-| `ComCcsds` | CCSDS framing/deframing pipeline; connects to HC-12 UART driver |
+| `ComCcsds.FramingSubtopology` | CCSDS framing/deframing pipeline **without** `Svc.ComStub`. The user is responsible for wiring 5 connections to a component implementing `Svc.Com` — `HC12Manager` provides those endpoints (it is the Com Adapter, replacing ComStub). |
 | `FileHandling` | PrmDb (parameter persistence); FileUplink/Downlink optional |
 
 **Note:** `DataProducts` and science subtopologies are out of scope.
@@ -245,7 +246,7 @@ Settings are **persistent across power cycles** — factory defaults are accepta
 The radio link uses an **HC-12 433 MHz UART module** as a transparent byte pipe.
 
 - The HC-12 is a transparent UART link — bytes sent to the UART appear at the remote end, and vice versa.
-- `HC12Manager` implements `Drv::ByteStreamDriverModel` and wraps `LinuxUartDriver`.
+- `HC12Manager` implements `Svc.Com` (the Com Adapter interface) upward into the `ComCcsds.FramingSubtopology` — it replaces `Svc.ComStub`. Downward it implements `Drv.ByteStreamDriverClient` to talk to `LinuxUartDriver`.
 - `CommsApplication` controls the `ComCcsds` ComQueue drain rate based on satellite mode.
 - The F Prime GDS on the ground side connects via USB-TTL to the second HC-12 module.
 
@@ -433,6 +434,6 @@ If a component's `register_fprime_ut()` references test source files that don't 
 5. **No DeployPanelsManager.** The burn wire is not on the PDS board. `DEPLOY_PANELS` command does not exist.
 6. **Two deployment topologies:** `FeatherCdhFullDeployment` (all hardware including PDS) and `FeatherCdhPartialDeployment` (BMS + radio only, no PDS components). PDS-dependent components (`WatchdogPinger`, `INA3221Manager`, their drivers) are excluded from the partial deployment — not stubbed out, just absent.
 7. **BQ25756E interface is plain I2C.** `MpptIcManager` uses direct I2C read/write calls — no complex class hierarchy.
-8. **HC-12 is the radio link.** `HC12Manager` implements `Drv::ByteStreamDriverModel` and wraps `LinuxUartDriver`. Same `ComCcsds` subtopology applies.
+8. **HC-12 is the radio link.** `HC12Manager` is the Com Adapter: it implements `Svc.Com` upward (replacing `Svc.ComStub`) and `Drv.ByteStreamDriverClient` downward toward `LinuxUartDriver`. The project uses `ComCcsds.FramingSubtopology` (no ComStub instance).
 9. **`BQ25756Reg` enum** (register names for `SET_IC_REGISTER` command) should be defined to match the register table above, with human-readable names replacing raw hex addresses.
 10. **WatchdogPinger runs at 10 Hz.** TPS3431S minimum WDI pulse width is 50 ns — assert then immediately deassert with no delay needed. PDS window watchdog must be configured for a compatible window around 10 Hz.
