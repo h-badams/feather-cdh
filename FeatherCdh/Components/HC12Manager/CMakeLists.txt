@@ -16,3 +16,14 @@ register_fprime_library(
     SOURCES
         "${CMAKE_CURRENT_LIST_DIR}/HC12Manager.cpp"
 )
+
+register_fprime_ut(
+    SOURCES
+        "${CMAKE_CURRENT_LIST_DIR}/test/ut/TestState.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/test/ut/TestMain.cpp"
+    AUTOCODER_INPUTS
+        "${CMAKE_CURRENT_LIST_DIR}/HC12Manager.fpp"
+    DEPENDS
+        STest
+    UT_AUTO_HELPERS
+)
