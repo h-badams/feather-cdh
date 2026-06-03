@@ -70,6 +70,10 @@ void HC12Manager ::drvReceiveIn_handler(FwIndexType portNum,
 
 void HC12Manager ::schedIn_handler(FwIndexType portNum, U32 context) {
     this->sm_sendSignal_tick();
+    // Drain all queued SM signals for this tick, including signals chained by SM actions.
+    // Required because this is a queued component with no dedicated thread.
+    while (this->doDispatch() == Fw::QueuedComponentBase::MSG_DISPATCH_OK) {
+    }
 }
 
 // ----------------------------------------------------------------------
