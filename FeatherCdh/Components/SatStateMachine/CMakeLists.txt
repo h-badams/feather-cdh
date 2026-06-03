@@ -6,3 +6,15 @@ register_fprime_library(
     DEPENDS
         FeatherCdh_Types
 )
+
+register_fprime_ut(
+    SOURCES
+        "${CMAKE_CURRENT_LIST_DIR}/test/ut/TestState.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/test/ut/TestMain.cpp"
+    AUTOCODER_INPUTS
+        "${CMAKE_CURRENT_LIST_DIR}/SatStateMachine.fpp"
+    DEPENDS
+        STest
+        FeatherCdh_Types
+    UT_AUTO_HELPERS
+)
