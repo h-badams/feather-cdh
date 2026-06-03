@@ -252,6 +252,51 @@ The radio link uses an **HC-12 433 MHz UART module** as a transparent byte pipe.
 
 ---
 
+## Deployments
+
+The project currently builds **three** deployments, each with its own `Top/` topology under `FeatherCdh/`. Only one is registered in `FeatherCdh/CMakeLists.txt` at a time (uncomment the desired `add_fprime_subdirectory(...)`); the ESP32 deployment is the one currently active.
+
+| Deployment | Platform / toolchain | Purpose |
+|------------|----------------------|---------|
+| `FeatherCdhDesktopDeployment` | native / `arm-hf-linux` (Linux) | Full-feature host build for unblocking software development and GDS testing. Richest topology. |
+| `FeatherCdhPartialDeployment` | native Linux | BMS + radio only subset (no PDS components), host-side. Mirrors Desktop but uses `uartDriver` for the HC-12 link. |
+| `FeatherCdhEsp32Deployment` | `esp32s3` (ESP32-S3, Arduino core + its bundled FreeRTOS, `fprime-arduino` + `fprime-baremetal`) | The actual flight-target build. Trimmed topology to fit MCU/FreeRTOS/Arduino-core constraints. |
+
+### Topology differences (instances)
+
+| Instance role | Desktop | Partial | ESP32 |
+|---------------|:-------:|:-------:|:-----:|
+| Rate source | `linuxTimer` | `linuxTimer` | `hardwareRateDriver` (Arduino) |
+| Time | `posixTime` | `posixTime` | `arduinoTime` |
+| Comms byte stream | `comDriver` (TCP) | `uartDriver` | `streamDriver` (`Arduino.StreamDriver`, UART) |
+| Core app + EPS + Comms stack | ✅ | ✅ | ✅ (`satStateMachine`, `epsApplication`, `commsApplication`, `mpptIcManager`, `hc12Manager`, `i2cDriverBms`, `gpioDriverSetPin`) |
+| `cmdSeq` (command sequencer) | ✅ | ✅ | ❌ cut |
+| `systemResources` | ✅ | ✅ | ❌ cut |
+| `gpioDriverInt` (BQ25756E INT input) | ✅ | ✅ | ❌ cut |
+| Param persistence | — | — | `FileHandling.prmDb` |
+
+> Note: `WatchdogPinger` and `INA3221Manager` (PDS-dependent) are not instantiated in **any** of the current topologies — they are built as libraries but excluded pending PDS bring-up.
+
+### ESP32 deployment: changes vs. a stock `fprime-arduino` setup
+
+Getting the ESP32-S3 build to compile/link required deviations from a vanilla `fprime-arduino` deployment and patches to the `fprime-arduino` submodule itself:
+
+1. **Deployment `CMakeLists.txt` must call the Arduino finalize hook.** `FeatherCdh/FeatherCdhEsp32Deployment/CMakeLists.txt` needs `restrict_platforms(ArduinoFw)` and, after `register_fprime_deployment(...)`, `finalize_arduino_executable("${FPRIME_CURRENT_MODULE}")`. Without it the `arduino-cli-sketch/` directory (containing `build_opt.h`, the precompiled Arduino core, and loose objects) is never generated, and the build fails with `build_opt.h: No such file or directory`. This matches the official `fprime-arduino-deployment-cookiecutter` template — the original deployment CMakeLists was missing both lines.
+
+2. **`fprime-arduino` `Arduino/Os/File.cpp` patched for the ESP32 core's filesystem API.** The stock `open()` passes SdFat-style **integer** POSIX flags (`O_RDONLY`, `FILE_WRITE`, …) to `SD.open()`, but ESP32 core 2.0.9's `fs::FS::open(const char* path, const char* mode, bool create)` takes a **mode string** (`"r"/"w"/"a"`). `open()` was rewritten to map the F´ `Mode` enum onto ESP32 string modes + a `create` flag.
+
+3. **`fprime-arduino` `Arduino/Os/CMakeLists.txt` include-path glob hack.** `target_use_arduino_libraries("SD")` did not reliably propagate the transitive header chain (`SD.h` → `FS.h` → …) under this toolchain, so the bundled ESP32 core libraries and user libraries are globbed onto the include path explicitly.
+
+### Functionality cut due to hardware / FreeRTOS / Arduino-core constraints
+
+- **`cmdSeq` (Command Sequencer) removed** — sequence file storage/replay is not carried on the MCU build.
+- **`systemResources` removed** — host-style CPU/memory resource telemetry is not meaningful/available on the bare MCU.
+- **BQ25756E interrupt path (`gpioDriverInt`) removed** — `MpptIcManager`'s `intPin`-driven RUN→RESET interrupt is dropped; the device is polled instead. (The host deployments keep the interrupt GPIO.)
+- **File/SD semantics are approximate** — the ESP32 `fs::FS` string-mode `open()` cannot express F´'s full mode set: `OPEN_WRITE`, `OPEN_SYNC_WRITE`, and `OPEN_CREATE` all collapse to `"w"`, and the `OVERWRITE`/`O_EXCL` (exclusive-create) distinction is lost. Acceptable only because file I/O is limited to `PrmDb` persistence.
+- **OS layer is the `fprime-baremetal`/Arduino virtualization**, not full POSIX — the ESP32-S3 runs the Arduino core's bundled FreeRTOS, and the F´ scheduler uses the baremetal scheduler (`FPRIME_USE_BAREMETAL_SCHEDULER ON` in `esp32s3.cmake`).
+
+---
+
 ## Repository Structure
 
 ```
@@ -432,7 +477,7 @@ If a component's `register_fprime_ut()` references test source files that don't 
 3. **Application components do not know the satellite's mode representation.** They receive their own subsystem mode enum from SatStateMachine. They must not import or reference `Sat::Mode` or `Sat::StandbySubmode`.
 4. **CommsApplication controls the ComQueue drain rate.** It is the sole driver of `comQueue.run`. In `Safe` mode the drain fires every `SAFE_DRAIN_DIVISOR` ticks (default 1 Hz); in `Normal` mode it fires each 10 Hz tick. Event severity filtering (ActiveLogger) and telemetry packet filtering (TlmPacketizer) are separately configurable via ground command.
 5. **No DeployPanelsManager.** The burn wire is not on the PDS board. `DEPLOY_PANELS` command does not exist.
-6. **Two deployment topologies:** `FeatherCdhFullDeployment` (all hardware including PDS) and `FeatherCdhPartialDeployment` (BMS + radio only, no PDS components). PDS-dependent components (`WatchdogPinger`, `INA3221Manager`, their drivers) are excluded from the partial deployment — not stubbed out, just absent.
+6. **Three deployments** (see the **Deployments** section above): `FeatherCdhDesktopDeployment` and `FeatherCdhPartialDeployment` (host/Linux) and `FeatherCdhEsp32Deployment` (the ESP32-S3 flight target). PDS-dependent components (`WatchdogPinger`, `INA3221Manager`, their drivers) are not instantiated in any current topology — built as libraries but absent, pending PDS bring-up.
 7. **BQ25756E interface is plain I2C.** `MpptIcManager` uses direct I2C read/write calls — no complex class hierarchy.
 8. **HC-12 is the radio link.** `HC12Manager` is the Com Adapter: it implements `Svc.Com` upward (replacing `Svc.ComStub`) and `Drv.ByteStreamDriverClient` downward toward `LinuxUartDriver`. The project uses `ComCcsds.FramingSubtopology` (no ComStub instance).
 9. **`BQ25756Reg` enum** (register names for `SET_IC_REGISTER` command) should be defined to match the register table above, with human-readable names replacing raw hex addresses.
