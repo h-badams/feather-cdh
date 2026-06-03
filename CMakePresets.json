@@ -34,6 +34,17 @@
         "cacheVariables": {
             "BUILD_TESTING": "ON"
         }
+      },
+      {
+        "name": "esp32s3",
+        "inherits": "fprime",
+        "displayName": "ESP32-S3 Cross-Compile",
+        "description": "Cross-compile for ESP32-S3 Dev Module via fprime-arduino. Pass --toolchain cmake/toolchain/esp32s3.cmake to fprime-util generate.",
+        "binaryDir": "${sourceDir}/build-fprime-automatic-esp32s3",
+        "cacheVariables": {
+            "FPRIME_ENABLE_FRAMEWORK_UTS": "OFF",
+            "FPRIME_ENABLE_AUTOCODER_UTS": "OFF"
+        }
       }
   ]
 }
